@@ -1,6 +1,14 @@
 #ifndef LIVOX_DEF_H
 #define LIVOX_DEF_H
 
+#pragma pack(1)
+
+typedef struct {
+  uint16_t dot_num;
+  uint8_t data_type;
+  double stamp;
+} CompactHeader;
+
 typedef struct {
   uint8_t version;
   uint16_t length;

@@ -35,8 +35,9 @@ int main(int argc, char** argv)
   rosbag::Bag bag;
   bag.open(output_file, rosbag::bagmode::Write);
 
-  LivoxLidarEthernetPacket packet;
+  CompactHeader header;
   LivoxLidarCartesianHighRawPoint high_point;
+  LivoxLidarImuRawPoint imu;
 
   pcl::PointCloud<PointXYZIRT> cloud;
   double base_stamp = -1;
@@ -45,9 +46,9 @@ int main(int argc, char** argv)
   unsigned int lidar_seq = 0;
   unsigned int imu_seq = 0;
 
-  while (ifs.read(reinterpret_cast<char*>(&packet), sizeof(packet)))
+  while (ifs.read(reinterpret_cast<char*>(&header), sizeof(header)))
   {
-    double current_stamp = convertTimestamp(packet.timestamp);
+    double current_stamp = header.stamp;
     std::cout << std::setprecision(15) << current_stamp << std::endl;
 
     if (base_stamp < 0)
@@ -55,9 +56,9 @@ int main(int argc, char** argv)
       base_stamp = current_stamp;
     }
 
-    if (packet.data_type == kLivoxLidarCartesianCoordinateHighData)
+    if (header.data_type == kLivoxLidarCartesianCoordinateHighData)
     {
-      cloud.reserve(cloud.size() + packet.dot_num);
+      cloud.reserve(cloud.size() + header.dot_num);
       if (current_stamp - base_stamp > points_interval)
       {
         sensor_msgs::PointCloud2 msg;
@@ -65,12 +66,13 @@ int main(int argc, char** argv)
         msg.header.stamp = ros::Time(base_stamp);
         msg.header.frame_id = "livox";
         msg.header.seq = lidar_seq++;
-        bag.write("livox", ros::Time(base_stamp), msg);
+        bag.write("livox/lidar", ros::Time(base_stamp), msg);
         base_stamp = current_stamp;
         cloud.clear();
+        cloud.reserve(header.dot_num);
       }
 
-      for (int i = 0; i < packet.dot_num; i++)
+      for (int i = 0; i < header.dot_num; i++)
       {
         ifs.read(reinterpret_cast<char*>(&high_point), sizeof(high_point));
         PointXYZIRT point;
@@ -80,10 +82,11 @@ int main(int argc, char** argv)
         point.intensity = high_point.reflectivity;
         point.ring = high_point.tag;
         point.time = current_stamp - base_stamp;
+        cloud.push_back(point);
       }
     }
 
-    else if (packet.data_type == kLivoxLidarImuData)
+    else if (header.data_type == kLivoxLidarImuData)
     {
       LivoxLidarImuRawPoint imu;
       ifs.read(reinterpret_cast<char*>(&imu), sizeof(imu));
@@ -99,7 +102,7 @@ int main(int argc, char** argv)
       msg.linear_acceleration.y = imu.acc_y * gyro_scale;
       msg.linear_acceleration.z = imu.acc_z * gyro_scale;
 
-      bag.write("livox_imu", ros::Time(current_stamp), msg);
+      bag.write("livox/imu", ros::Time(current_stamp), msg);
     }
   }
 
