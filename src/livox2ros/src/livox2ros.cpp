@@ -49,7 +49,6 @@ int main(int argc, char** argv)
   while (ifs.read(reinterpret_cast<char*>(&header), sizeof(header)))
   {
     double current_stamp = header.stamp;
-    std::cout << std::setprecision(15) << current_stamp << std::endl;
 
     if (base_stamp < 0)
     {
@@ -61,8 +60,17 @@ int main(int argc, char** argv)
       cloud.reserve(cloud.size() + header.dot_num);
       if (current_stamp - base_stamp > points_interval)
       {
+        if (current_stamp - base_stamp > 2 * points_interval)
+        {
+          std::cout << "Warning: " << current_stamp - base_stamp << "s gap detected." << std::endl;
+        }
         sensor_msgs::PointCloud2 msg;
         pcl::toROSMsg(cloud, msg);
+        if (base_stamp <= 0)
+        {
+          std::cerr << "Error: negative timestamp detected " << base_stamp << std::endl;
+          break;
+        }
         msg.header.stamp = ros::Time(base_stamp);
         msg.header.frame_id = "livox";
         msg.header.seq = lidar_seq++;
@@ -90,6 +98,12 @@ int main(int argc, char** argv)
     {
       LivoxLidarImuRawPoint imu;
       ifs.read(reinterpret_cast<char*>(&imu), sizeof(imu));
+
+      if (current_stamp <= 0)
+      {
+        std::cerr << "Error: negative timestamp detected in IMU " << current_stamp << std::endl;
+        current_stamp = base_stamp;
+      }
 
       sensor_msgs::Imu msg;
       msg.header.stamp = ros::Time(current_stamp);
